@@ -2,6 +2,8 @@ package core;
 
 import entity.BaseDrink;
 
+import java.sql.SQLException;
+
 public interface CoffeeMachine {
     // --- MONEY ---
     void insertMoney(double amount);
@@ -15,7 +17,7 @@ public interface CoffeeMachine {
     void makeDrink(BaseDrink drink, double amount);
 
     // --- INGREDIENT MANAGEMENT ---
-    int getWater();
+    int getWater() throws SQLException;
     int getMilk();
     int getCoffeeBeans();
 

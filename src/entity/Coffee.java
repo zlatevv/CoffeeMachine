@@ -4,7 +4,7 @@ import java.util.LinkedHashMap;
 
 public class Coffee extends BaseDrink{
     private static final String NAME = "Coffee";
-    private static final Double PRICE = 1.20;
+    private static final Double PRICE = 0.60;
     private static final LinkedHashMap<String, Integer> INGREDIENTS = new LinkedHashMap<>();
 
     public Coffee() {

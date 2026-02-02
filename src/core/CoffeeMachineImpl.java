@@ -1,48 +1,74 @@
 package core;
 
 import entity.BaseDrink;
-
-import java.util.LinkedHashMap;
+import java.sql.*;
 import java.util.Map;
 
-public class CoffeeMachineImpl implements CoffeeMachine{
-    private LinkedHashMap<Integer, Integer> money = new LinkedHashMap<>();;
-    private LinkedHashMap<String, Integer> ingredients = new LinkedHashMap<>();;
+public class CoffeeMachineImpl implements CoffeeMachine {
+
     private double currentBalance = 0;
-    int[] nominals = {200, 100, 50, 20, 10};
+    private final int[] nominals = {200, 100, 50, 20, 10}; // in stotinki (1 lv = 100 stotinki)
 
-    public CoffeeMachineImpl() {
-        money.put(200, 2);
-        money.put(100, 5);
-        money.put(50, 10);
-        money.put(20, 10);
-        money.put(10, 20);
+    // --------------------
+    // MONEY HELPERS
+    // --------------------
+    private int getCoinQuantity(int denomination) {
+        String sql = "SELECT quantity FROM cash WHERE denomination = ?";
+        try (Connection con = DB.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, denomination);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) return rs.getInt("quantity");
+        } catch (SQLException e) {
+            System.err.println("DB error (getCoinQuantity): " + e.getMessage());
+        }
+        return 0;
+    }
 
-        ingredients.put("water", 2000);       // 2000 ml
-        ingredients.put("milk", 1000);        // 1000 ml
-        ingredients.put("coffeeBeans", 500);  // 500 g
+    private void addCoin(int denomination, int amount) {
+        String sql = "INSERT INTO cash (denomination, quantity) VALUES (?, ?) " +
+                "ON DUPLICATE KEY UPDATE quantity = quantity + ?";
+        try (Connection con = DB.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, denomination);
+            ps.setInt(2, amount);
+            ps.setInt(3, amount);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            System.err.println("DB error (addCoin): " + e.getMessage());
+        }
+    }
+
+    private void removeCoin(int denomination, int amount) {
+        String sql = "UPDATE cash SET quantity = quantity - ? WHERE denomination = ?";
+        try (Connection con = DB.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, amount);
+            ps.setInt(2, denomination);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            System.err.println("DB error (removeCoin): " + e.getMessage());
+        }
     }
 
     @Override
     public void insertMoney(double amount) {
+        int stotinki = (int)Math.round(amount * 100);
         int index = 0;
-        int stotinki = Math.toIntExact(Math.round(amount * 100));
-
         while (stotinki >= 10 && index < nominals.length) {
             if (stotinki >= nominals[index]) {
-                money.put(nominals[index], money.getOrDefault(nominals[index], 0) + 1);
+                addCoin(nominals[index], 1);
                 stotinki -= nominals[index];
-            }else {
+            } else {
                 index++;
             }
         }
-
         currentBalance += amount;
     }
 
     @Override
     public boolean checkIfMoneyIsEnough(BaseDrink drink, double amount) {
-        return drink.getPrice() <= amount;
+        return amount >= drink.getPrice();
     }
 
     @Override
@@ -52,21 +78,22 @@ public class CoffeeMachineImpl implements CoffeeMachine{
 
     @Override
     public void returnChange(BaseDrink drink, double change) {
-        int stotinki = (int) Math.round(change * 100);
+        int cents = (int)Math.round(change * 100);
         int index = 0;
 
-        while (stotinki >= 10 && index < nominals.length) {
-            if (stotinki >= nominals[index] && money.getOrDefault(nominals[index], 0) > 0) {
-                money.put(nominals[index], money.get(nominals[index]) - 1);
-                stotinki -= nominals[index];
+        while (cents >= 10 && index < nominals.length) {
+            int coinQty = getCoinQuantity(nominals[index]);
+            if (cents >= nominals[index] && coinQty > 0) {
+                removeCoin(nominals[index], 1);
+                cents -= nominals[index];
                 System.out.println("Returning: " + (nominals[index]/100.0) + " lv");
             } else {
                 index++;
             }
         }
 
-        if (stotinki > 0) {
-            System.out.println("Machine cannot return exact change! Remaining: " + (stotinki / 100.0) + " lv");
+        if (cents > 0) {
+            System.out.println("Cannot return exact change. Remaining: " + (cents / 100.0) + " lv");
         }
 
         currentBalance -= change;
@@ -77,19 +104,57 @@ public class CoffeeMachineImpl implements CoffeeMachine{
         return currentBalance;
     }
 
+    // --------------------
+    // INGREDIENT HELPERS
+    // --------------------
+    private int getIngredientQuantity(String name) {
+        String sql = "SELECT quantity FROM ingredients WHERE name = ?";
+        try (Connection con = DB.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setString(1, name);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) return rs.getInt("quantity");
+        } catch (SQLException e) {
+            System.err.println("DB error (getIngredientQuantity): " + e.getMessage());
+        }
+        return 0;
+    }
+
+    private void updateIngredient(String name, int change) {
+        String sql = "UPDATE ingredients SET quantity = quantity + ? WHERE name = ?";
+        try (Connection con = DB.getConnection();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, change);
+            ps.setString(2, name);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            System.err.println("DB error (updateIngredient): " + e.getMessage());
+        }
+    }
+
+    @Override
+    public int getWater() { return getIngredientQuantity("water"); }
+    @Override
+    public int getMilk() { return getIngredientQuantity("milk"); }
+    @Override
+    public int getCoffeeBeans() { return getIngredientQuantity("coffeeBeans"); }
+
+    @Override
+    public void refillWater(int amount) { updateIngredient("water", amount); }
+    @Override
+    public void refillMilk(int amount) { updateIngredient("milk", amount); }
+    @Override
+    public void refillBeans(int amount) { updateIngredient("coffeeBeans", amount); }
+
+    // --------------------
+    // DRINK LOGIC
+    // --------------------
     @Override
     public boolean canMakeDrink(BaseDrink drink) {
         for (Map.Entry<String, Integer> entry : drink.getNeedIngredients().entrySet()) {
-            String ingredientName = entry.getKey();
-            int required = entry.getValue();
-            int available = ingredients.getOrDefault(ingredientName, 0);
-
-            if (available < required) {
-                System.out.printf(
-                        "You don't have enough %s!\nYou need %d more!\n",
-                        ingredientName,
-                        required - available
-                );
+            int available = getIngredientQuantity(entry.getKey());
+            if (available < entry.getValue()) {
+                System.out.printf("Not enough %s! Need %d more.\n", entry.getKey(), entry.getValue() - available);
                 return false;
             }
         }
@@ -98,49 +163,26 @@ public class CoffeeMachineImpl implements CoffeeMachine{
 
     @Override
     public void makeDrink(BaseDrink drink, double amount) {
-        if (canMakeDrink(drink)){
-            if (checkIfMoneyIsEnough(drink, amount)){
-                drink.prepare();
-                insertMoney(amount);
-
-                double change = calculateChange(drink, amount);
-                if (change > 0){
-                    returnChange(drink, change);
-                }
-                drink.getNeedIngredients().forEach(
-                        (name, value) -> ingredients.put(name, ingredients.get(name) - value)
-                );
-            }
+        if (!checkIfMoneyIsEnough(drink, amount)) {
+            System.out.println("Not enough money!");
+            return;
         }
-    }
 
-    @Override
-    public int getWater() {
-        return ingredients.getOrDefault("water", 0);
-    }
+        if (!canMakeDrink(drink)) {
+            System.out.println("Cannot make drink due to insufficient ingredients.");
+            return;
+        }
 
-    @Override
-    public int getMilk() {
-        return ingredients.getOrDefault("milk", 0);
-    }
+        drink.prepare();
+        insertMoney(amount);
 
-    @Override
-    public int getCoffeeBeans() {
-        return ingredients.getOrDefault("coffeeBeans", 0);
-    }
+        // give change
+        double change = calculateChange(drink, amount);
+        if (change > 0) returnChange(drink, change);
 
-    @Override
-    public void refillWater(int amount) {
-        ingredients.put("water", ingredients.getOrDefault("water", 0) + amount);
-    }
-
-    @Override
-    public void refillMilk(int amount) {
-        ingredients.put("milk", ingredients.getOrDefault("milk", 0) + amount);
-    }
-
-    @Override
-    public void refillBeans(int amount) {
-        ingredients.put("coffeeBeans", ingredients.getOrDefault("coffeeBeans", 0) + amount);
+        // subtract ingredients in DB
+        for (Map.Entry<String, Integer> entry : drink.getNeedIngredients().entrySet()) {
+            updateIngredient(entry.getKey(), -entry.getValue());
+        }
     }
 }
