@@ -1,6 +1,7 @@
 package core;
 
 import entity.BaseDrink;
+import entity.Ingredient;
 import java.sql.*;
 import java.util.Map;
 
@@ -107,11 +108,11 @@ public class CoffeeMachineImpl implements CoffeeMachine {
     // --------------------
     // INGREDIENT HELPERS
     // --------------------
-    private int getIngredientQuantity(String name) {
+    private int getIngredientQuantity(Ingredient ingredient) {
         String sql = "SELECT quantity FROM ingredients WHERE name = ?";
         try (Connection con = DB.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setString(1, name);
+            ps.setString(1, ingredient.getDbName());
             ResultSet rs = ps.executeQuery();
             if (rs.next()) return rs.getInt("quantity");
         } catch (SQLException e) {
@@ -120,12 +121,12 @@ public class CoffeeMachineImpl implements CoffeeMachine {
         return 0;
     }
 
-    private void updateIngredient(String name, int change) {
+    private void updateIngredient(Ingredient ingredient, int change) {
         String sql = "UPDATE ingredients SET quantity = quantity + ? WHERE name = ?";
         try (Connection con = DB.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setInt(1, change);
-            ps.setString(2, name);
+            ps.setString(2, ingredient.getDbName());
             ps.executeUpdate();
         } catch (SQLException e) {
             System.err.println("DB error (updateIngredient): " + e.getMessage());
@@ -133,28 +134,29 @@ public class CoffeeMachineImpl implements CoffeeMachine {
     }
 
     @Override
-    public int getWater() { return getIngredientQuantity("water"); }
+    public int getWater() { return getIngredientQuantity(Ingredient.WATER); }
     @Override
-    public int getMilk() { return getIngredientQuantity("milk"); }
+    public int getMilk() { return getIngredientQuantity(Ingredient.MILK); }
     @Override
-    public int getCoffeeBeans() { return getIngredientQuantity("coffeeBeans"); }
+    public int getCoffeeBeans() { return getIngredientQuantity(Ingredient.COFFEE_BEANS); }
 
     @Override
-    public void refillWater(int amount) { updateIngredient("water", amount); }
+    public void refillWater(int amount) { updateIngredient(Ingredient.WATER, amount); }
     @Override
-    public void refillMilk(int amount) { updateIngredient("milk", amount); }
+    public void refillMilk(int amount) { updateIngredient(Ingredient.MILK, amount); }
     @Override
-    public void refillBeans(int amount) { updateIngredient("coffeeBeans", amount); }
+    public void refillBeans(int amount) { updateIngredient(Ingredient.COFFEE_BEANS, amount); }
 
     // --------------------
     // DRINK LOGIC
     // --------------------
     @Override
     public boolean canMakeDrink(BaseDrink drink) {
-        for (Map.Entry<String, Integer> entry : drink.getNeedIngredients().entrySet()) {
+        for (Map.Entry<Ingredient, Integer> entry : drink.getNeedIngredients().entrySet()) {
             int available = getIngredientQuantity(entry.getKey());
             if (available < entry.getValue()) {
-                System.out.printf("Not enough %s! Need %d more.\n", entry.getKey(), entry.getValue() - available);
+                System.out.printf("Not enough %s! Need %d more.\n",
+                        entry.getKey().getDisplayName(), entry.getValue() - available);
                 return false;
             }
         }
@@ -181,7 +183,7 @@ public class CoffeeMachineImpl implements CoffeeMachine {
         if (change > 0) returnChange(drink, change);
 
         // subtract ingredients in DB
-        for (Map.Entry<String, Integer> entry : drink.getNeedIngredients().entrySet()) {
+        for (Map.Entry<Ingredient, Integer> entry : drink.getNeedIngredients().entrySet()) {
             updateIngredient(entry.getKey(), -entry.getValue());
         }
     }
