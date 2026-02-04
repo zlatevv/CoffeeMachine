@@ -1,19 +1,20 @@
 package entity;
 
 import java.util.LinkedHashMap;
+import java.util.Map;
 
 public class Coffee extends BaseDrink{
     private static final String NAME = "Coffee";
     private static final Double PRICE = 0.60;
-    private static final LinkedHashMap<String, Integer> INGREDIENTS = new LinkedHashMap<>();
+    private static final Map<Ingredient, Integer> INGREDIENTS = new LinkedHashMap<>();
 
     public Coffee() {
         super(NAME, PRICE, INGREDIENTS);
     }
 
     static {
-        INGREDIENTS.put("water", 200);
-        INGREDIENTS.put("coffeeBeans", 15);
+        INGREDIENTS.put(Ingredient.WATER, 200);
+        INGREDIENTS.put(Ingredient.COFFEE_BEANS, 15);
     }
 
     @Override
@@ -21,7 +22,7 @@ public class Coffee extends BaseDrink{
         System.out.println("Preparing a coffee ...");
 
         INGREDIENTS.forEach(
-                (name, value) -> System.out.printf("%d of %s\n", value, name)
+                (name, value) -> System.out.printf("%d of %s\n", value, name.getDisplayName())
         );
 
         System.out.println("Coffee made!");
