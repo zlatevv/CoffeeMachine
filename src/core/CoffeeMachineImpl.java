@@ -7,7 +7,7 @@ import java.util.Map;
 
 public class CoffeeMachineImpl implements CoffeeMachine {
 
-    private double currentBalance = 0;
+    private int currentBalance = 0;
     private final int[] nominals = {200, 100, 50, 20, 10}; // in stotinki (1 lv = 100 stotinki)
 
     // --------------------
@@ -26,25 +26,25 @@ public class CoffeeMachineImpl implements CoffeeMachine {
         return 0;
     }
 
-    private void addCoin(int denomination, int amount) {
+    private void addCoin(int denomination) {
         String sql = "INSERT INTO cash (denomination, quantity) VALUES (?, ?) " +
                 "ON DUPLICATE KEY UPDATE quantity = quantity + ?";
         try (Connection con = DB.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setInt(1, denomination);
-            ps.setInt(2, amount);
-            ps.setInt(3, amount);
+            ps.setInt(2, 1);
+            ps.setInt(3, 1);
             ps.executeUpdate();
         } catch (SQLException e) {
             System.err.println("DB error (addCoin): " + e.getMessage());
         }
     }
 
-    private void removeCoin(int denomination, int amount) {
+    private void removeCoin(int denomination) {
         String sql = "UPDATE cash SET quantity = quantity - ? WHERE denomination = ?";
         try (Connection con = DB.getConnection();
              PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setInt(1, amount);
+            ps.setInt(1, 1);
             ps.setInt(2, denomination);
             ps.executeUpdate();
         } catch (SQLException e) {
@@ -54,17 +54,19 @@ public class CoffeeMachineImpl implements CoffeeMachine {
 
     @Override
     public void insertMoney(double amount) {
-        int stotinki = (int)Math.round(amount * 100);
+        int cents = (int)Math.round(amount * 100);
         int index = 0;
-        while (stotinki >= 10 && index < nominals.length) {
-            if (stotinki >= nominals[index]) {
-                addCoin(nominals[index], 1);
-                stotinki -= nominals[index];
+        while (cents >= 10 && index < nominals.length) {
+            int currentNominal = nominals[index];
+
+            if (cents >= currentNominal) {
+                addCoin(currentNominal);
+                cents -= currentNominal;
             } else {
                 index++;
             }
         }
-        currentBalance += amount;
+        currentBalance += (int) amount;
     }
 
     @Override
@@ -83,21 +85,23 @@ public class CoffeeMachineImpl implements CoffeeMachine {
         int index = 0;
 
         while (cents >= 10 && index < nominals.length) {
-            int coinQty = getCoinQuantity(nominals[index]);
-            if (cents >= nominals[index] && coinQty > 0) {
-                removeCoin(nominals[index], 1);
-                cents -= nominals[index];
-                System.out.println("Returning: " + (nominals[index]/100.0) + " lv");
+            int currentNominal = nominals[index];
+
+            int coinQty = getCoinQuantity(currentNominal);
+            if (cents >= currentNominal && coinQty > 0) {
+                removeCoin(currentNominal);
+                cents -= currentNominal;
+                System.out.println("Returning: " + (currentNominal/100.0) + " euro");
             } else {
                 index++;
             }
         }
 
         if (cents > 0) {
-            System.out.println("Cannot return exact change. Remaining: " + (cents / 100.0) + " lv");
+            System.out.println("Cannot return exact change. Remaining: " + (cents / 100.0) + " euro");
         }
 
-        currentBalance -= change;
+        currentBalance -= (int) change;
     }
 
     @Override

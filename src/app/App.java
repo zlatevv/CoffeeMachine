@@ -1,16 +1,17 @@
 package app;
 
 import core.CoffeeMachineImpl;
-import entity.BaseDrink;
-import entity.Coffee;
-import entity.Latte;
-import entity.Cappuccino;
+import entity.*;
 
-import java.sql.SQLException;
 import java.util.Scanner;
 
 public class App {
-    public static void main(String[] args) throws SQLException {
+
+    // ✅ valid coins in stotinki
+    private static final int[] VALID_COINS = {10, 20, 50, 100, 200};
+
+    public static void main(String[] args) {
+
         CoffeeMachineImpl machine = new CoffeeMachineImpl();
         Scanner scanner = new Scanner(System.in);
 
@@ -18,94 +19,141 @@ public class App {
         boolean running = true;
 
         while (running) {
-            System.out.println("\nAvailable drinks:");
-            System.out.println("1. Coffee - 0.60 euro");
-            System.out.println("2. Latte - 0.80 euro");
-            System.out.println("3. Cappuccino - 1.50 euro");
-            System.out.println("4. Refill Ingredients");
-            System.out.println("5. Exit");
-            System.out.print("Select an option (1-5): ");
-            int choice = scanner.nextInt();
+            try {
+                System.out.println("\nAvailable drinks:");
+                System.out.println("1. Coffee - 0.60 euro");
+                System.out.println("2. Latte - 0.80 euro");
+                System.out.println("3. Cappuccino - 1.50 euro");
+                System.out.println("4. Refill Ingredients");
+                System.out.println("5. Exit");
+                System.out.print("Select an option (1-5): ");
 
-            BaseDrink selectedDrink = null;
-
-            switch (choice) {
-                case 1 -> selectedDrink = new Coffee();
-                case 2 -> selectedDrink = new Latte();
-                case 3 -> selectedDrink = new Cappuccino();
-                case 4 -> {
-                    System.out.print("Refill Water (ml): ");
-                    int water = scanner.nextInt();
-                    machine.refillWater(water);
-
-                    System.out.print("Refill Milk (ml): ");
-                    int milk = scanner.nextInt();
-                    machine.refillMilk(milk);
-
-                    System.out.print("Refill Coffee Beans (g): ");
-                    int beans = scanner.nextInt();
-                    machine.refillBeans(beans);
-
-                    System.out.println("Ingredients updated successfully!");
-                    System.out.printf("Current ingredients - Water: %d ml, Milk: %d ml, Beans: %d g\n",
-                            machine.getWater(), machine.getMilk(), machine.getCoffeeBeans());
+                if (!scanner.hasNextInt()) {
+                    System.out.println("Please enter a number!");
+                    scanner.nextLine();
                     continue;
                 }
-                case 5 -> {
-                    running = false;
-                    continue;
-                }
-                default -> {
-                    System.out.println("Invalid choice!");
-                    continue;
-                }
-            }
 
-            double inserted = 0;
-            double price = selectedDrink.getPrice();
+                int choice = scanner.nextInt();
 
-            while (inserted < price) {
-                double remaining = price - inserted;
-                System.out.printf("You still need %.2f euro\n", remaining);
-                System.out.print("Insert coin (0.10, 0.20, 0.50, 1, 2): ");
-                double coin = scanner.nextDouble();
+                BaseDrink selectedDrink;
 
-                int stotinki = (int)Math.round(coin * 100);
-                int[] validCoins = {10, 20, 50, 100, 200};
-                boolean valid = false;
+                switch (choice) {
+                    case 1 -> selectedDrink = new Coffee();
+                    case 2 -> selectedDrink = new Latte();
+                    case 3 -> selectedDrink = new Cappuccino();
 
-                for (int c : validCoins) {
-                    if (stotinki == c) {
-                        valid = true;
-                        break;
+                    case 4 -> {
+                        refillMenu(machine, scanner);
+                        continue;
+                    }
+
+                    case 5 -> {
+                        running = false;
+                        continue;
+                    }
+
+                    default -> {
+                        System.out.println("Invalid choice!");
+                        continue;
                     }
                 }
 
-                if (!valid) {
-                    System.out.println("Invalid coin! Please insert a valid denomination.");
-                    continue;
-                }
+                handleDrinkPurchase(machine, scanner, selectedDrink);
 
-                // Insert coin into machine
-                machine.insertMoney(coin);
-                inserted += coin;
+            } catch (Exception e) {
+                System.out.println("Something went wrong. Try again.");
+                scanner.nextLine(); // clear buffer
             }
-
-            // Check if enough ingredients
-            if (!machine.canMakeDrink(selectedDrink)) {
-                System.out.println("Cannot make drink. Transaction cancelled.");
-                continue;
-            }
-
-            // Make the drink
-            machine.makeDrink(selectedDrink, inserted);
-
-            System.out.printf("Current machine balance: %.2f euro\n", machine.getCurrentBalance());
-            System.out.printf("Remaining ingredients - Water: %d ml, Milk: %d ml, Beans: %d g\n",
-                    machine.getWater(), machine.getMilk(), machine.getCoffeeBeans());
         }
 
         System.out.println("Thank you for using the Coffee Machine!");
-        scanner.close();
+    }
+
+    // -------------------------
+    // DRINK PURCHASE
+    // -------------------------
+    private static void handleDrinkPurchase(CoffeeMachineImpl machine, Scanner scanner, BaseDrink drink) {
+
+        double inserted = 0;
+        double price = drink.getPrice();
+
+        while (inserted < price) {
+
+            double remaining = price - inserted;
+            System.out.printf("You still need %.2f euro\n", remaining);
+            System.out.print("Insert coin (0.10, 0.20, 0.50, 1, 2): ");
+
+            if (!scanner.hasNextDouble()) {
+                System.out.println("Invalid input!");
+                scanner.nextLine();
+                continue;
+            }
+
+            double coin = scanner.nextDouble();
+            int stotinki = (int) Math.round(coin * 100);
+
+            if (!isValidCoin(stotinki)) {
+                System.out.println("Invalid coin!");
+                continue;
+            }
+
+            machine.insertMoney(coin);
+            inserted += coin;
+        }
+
+        // ingredient check
+        if (!machine.canMakeDrink(drink)) {
+            System.out.println("Not enough ingredients. Money returned.");
+            return;
+        }
+
+        // make drink
+        machine.makeDrink(drink, inserted);
+
+        System.out.printf("Machine balance: %.2f euro\n", machine.getCurrentBalance());
+        System.out.printf("Remaining ingredients - Water: %d ml, Milk: %d ml, Beans: %d g\n",
+                machine.getWater(),
+                machine.getMilk(),
+                machine.getCoffeeBeans());
+    }
+
+    // -------------------------
+    // REFILL MENU
+    // -------------------------
+    private static void refillMenu(CoffeeMachineImpl machine, Scanner scanner) {
+        try {
+            System.out.print("Refill Water (ml): ");
+            int water = scanner.nextInt();
+            machine.refillWater(water);
+
+            System.out.print("Refill Milk (ml): ");
+            int milk = scanner.nextInt();
+            machine.refillMilk(milk);
+
+            System.out.print("Refill Coffee Beans (g): ");
+            int beans = scanner.nextInt();
+            machine.refillBeans(beans);
+
+            System.out.println("Ingredients updated!");
+            System.out.printf("Water: %d ml, Milk: %d ml, Beans: %d g\n",
+                    machine.getWater(),
+                    machine.getMilk(),
+                    machine.getCoffeeBeans());
+
+        } catch (Exception e) {
+            System.out.println("Invalid refill input!");
+            scanner.nextLine();
+        }
+    }
+
+    // -------------------------
+    // HELPERS
+    // -------------------------
+    private static boolean isValidCoin(int coin) {
+        for (int c : VALID_COINS) {
+            if (c == coin) return true;
+        }
+        return false;
     }
 }
